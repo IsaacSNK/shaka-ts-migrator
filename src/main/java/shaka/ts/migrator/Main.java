@@ -21,8 +21,7 @@ public class Main {
         try {
             Options options = new Options();
             String shakaFolderPath = System.getProperty("user.home") + "/dev-workspace/shaka-player-fork";
-            //String[] paths = new String[] {shakaFolderPath + "/lib", shakaFolderPath + "/ui"};
-            String[] paths = new String[]{shakaFolderPath + "/lib"};
+            String[] paths = new String[] {shakaFolderPath + "/lib", shakaFolderPath + "/ui", shakaFolderPath + "/externs"};
             TypeScriptGenerator gents = new TypeScriptGenerator(options);
             Set<Path> inputFiles = getAllFilesRecursively(paths);
             Set<String> filesToConvert = new HashSet<>();
@@ -49,7 +48,7 @@ public class Main {
     private static Set<Path> getAllFilesRecursively(String[] paths) throws IOException {
         Set<Path> result = new HashSet<>();
         BiPredicate<Path, BasicFileAttributes> matcher = (path, attributes) -> {
-            return attributes.isRegularFile() && path.toString().endsWith("ewma.js");
+            return attributes.isRegularFile() && path.toString().endsWith(".js");
         };
         for (String path : paths) {
             try (Stream<Path> stream = java.nio.file.Files.find(Paths.get(path), 999, matcher)) {

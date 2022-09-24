@@ -69,6 +69,10 @@ public class GentsCodeGenerator extends CodeGenerator {
           add(")");
         }
         break;
+      case NAMESPACE:
+        add("\n");
+        break;
+
       default:
         break;
     }

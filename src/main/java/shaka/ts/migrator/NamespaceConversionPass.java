@@ -82,8 +82,6 @@ public final class NamespaceConversionPass implements CompilerPass {
   public void process(Node externs, Node root) {
     NodeTraversal.traverse(compiler, root, new ModuleExportConverter());
     NodeTraversal.traverse(compiler, root, new DestructuringCollector());
-    NodeTraversal.traverse(compiler, root, new ModuleImportConverter());
-    NodeTraversal.traverse(compiler, root, new ModuleImportRewriter());
   }
 
   /**
@@ -93,7 +91,12 @@ public final class NamespaceConversionPass implements CompilerPass {
   private class ModuleExportConverter extends AbstractTopLevelCallback {
     @Override
     public void visit(NodeTraversal t, Node n, Node parent) {
+      System.out.println(n.toString());
       String fileName = n.getSourceFileName();
+      if (isARequireLikeCall(n)) {
+        n.detach();
+        return;
+      }
       if (n.isScript()) {
         if (fileToModule.containsKey(fileName)) {
           // Module is declared purely for side effects
@@ -201,6 +204,12 @@ public final class NamespaceConversionPass implements CompilerPass {
       }
       exportsToNodes.put(ExportedSymbol.of(fileName, nodeName, nodeName), namedNode);
     }
+
+    public static boolean isARequireLikeCall(Node node) {
+      return node != null
+              && node.isExprResult() && node.getFirstChild().isCall()
+              && node.getFirstFirstChild().matchesQualifiedName("goog.require");
+    }
   }
   /**
    * Collects all top-level destructuring assignments. If later we find that the right hand side is
@@ -223,80 +232,6 @@ public final class NamespaceConversionPass implements CompilerPass {
               potentialImportSpec);
         }
       }
-    }
-  }
-
-  /** Converts goog.require statements into TypeScript import statements. */
-  private class ModuleImportConverter extends AbstractTopLevelCallback {
-    @Override
-    public void visit(NodeTraversal t, Node n, Node parent) {
-      if (NodeUtil.isNameDeclaration(n)) {
-        Node node = n.getFirstFirstChild();
-
-        // var x = goog.require(...);
-        if (isARequireLikeCall(node)) {
-          Node callNode = node;
-          String requiredNamespace = callNode.getLastChild().getString();
-          String localName = n.getFirstChild().getQualifiedName();
-          ModuleImport moduleImport =
-              new ModuleImport(n, Collections.singletonList(localName), requiredNamespace, false);
-          if (moduleImport.validateImport()) {
-            convertNonDestructuringRequireToImportStatements(n, moduleImport);
-          }
-          return;
-        }
-
-        // var {foo, bar} = goog.require(...);
-        if (isADestructuringRequireCall(node)) {
-          Node importedNode = node.getFirstChild();
-          // For multiple destructuring imports, there are multiple full local names.
-          // This does not support renaming imports of the sort
-          // const {a: b} = goog.require
-          // TODO(rado): add support for that pattern.
-          ArrayList<String> namedExports = new ArrayList<String>();
-          while (importedNode != null) {
-            namedExports.add(importedNode.getString());
-            importedNode = importedNode.getNext();
-          }
-          String requiredNamespace = node.getNext().getFirstChild().getNext().getString();
-          ModuleImport moduleImport = new ModuleImport(n, namedExports, requiredNamespace, true);
-          if (moduleImport.validateImport()) {
-            convertDestructuringRequireToImportStatements(n, moduleImport);
-          }
-          return;
-        }
-      } else if (n.isExprResult()) {
-        // goog.require(...);
-        Node callNode = n.getFirstChild();
-        if (isARequireLikeCall(callNode)) {
-          String requiredNamespace = callNode.getLastChild().getString();
-          // For goog.require(...) imports, the full local name is just the required namespace/module.
-          // We use the suffix from the namespace as the local name, i.e. for
-          // goog.require("a.b"), requiredNamespace = "a.b", fullLocalName = ["a.b"], localName = ["b"]
-          ModuleImport moduleImport =
-              new ModuleImport(
-                  n, Collections.singletonList(requiredNamespace), requiredNamespace, false);
-          if (moduleImport.validateImport()) {
-            convertNonDestructuringRequireToImportStatements(n, moduleImport);
-          }
-          return;
-        }
-      }
-    }
-
-    private boolean isADestructuringRequireCall(Node node) {
-      return node != null
-          && node.isObjectPattern()
-          && node.getNext().getFirstChild() != null
-          && isARequireLikeCall(node.getNext());
-    }
-
-    private boolean isARequireLikeCall(Node node) {
-      return node != null
-          && node.isCall()
-          && (node.getFirstChild().matchesQualifiedName("goog.require")
-              || node.getFirstChild().matchesQualifiedName("goog.requireType")
-              || node.getFirstChild().matchesQualifiedName("goog.forwardDeclare"));
     }
   }
 
@@ -709,18 +644,38 @@ public final class NamespaceConversionPass implements CompilerPass {
         exportSpecNode.useSourceInfoFrom(rhs);
       } else {
         // Rewrite the export line to: <code>export const exportedSymbol = rhs</code>.
-        Node namespaceBody = IR.constNode(IR.name(exportedSymbol), rhs);
-        exportSpecNode = new Node(Token.EXPORT, namespaceBody);
-        namespaceBody.useSourceInfoFrom(rhs);
+        exportSpecNode = IR.constNode(IR.name(exportedSymbol), rhs);
+        exportSpecNode.useSourceInfoFrom(rhs);
       }
       exportSpecNode.setJSDocInfo(jsDoc);
       Node exportNode = new Node(Token.EXPORT, exportSpecNode);
       nodeComments.replaceWithComment(exprNode, exportNode);
-
+      this.wrapInNamespace(exportNode, exportNode.getParent(), exportedNamespace, exportedSymbol);
     } else {
       // Assume prefix has already been exported and just trim the prefix
       nameUtil.replacePrefixInName(lhs, exportedNamespace, exportedSymbol);
     }
+  }
+
+  private Node wrapInNamespace(Node currentNode, Node parent, String exportedNamespace, String exportedSymbol) {
+    var nameSpaceNode = new Node(Token.NAMESPACE,
+            Node.newString(Token.NAME, getNewNamespaceName(exportedNamespace, exportedSymbol)));
+    var nameSpaceBody = new Node(Token.NAMESPACE_ELEMENTS);
+    nameSpaceNode.addChildToBack(nameSpaceBody);
+    parent.replaceChild(currentNode, nameSpaceNode);
+    nameSpaceBody.addChildToBack(currentNode);
+    return nameSpaceNode;
+  }
+
+  private String getNewNamespaceName(String exportedNamespace, String exportedSymbol) {
+    if (!exportedNamespace.endsWith(exportedSymbol)) {
+      return exportedSymbol;
+    }
+    var namespaceComponents = exportedNamespace.split("\\.");
+    if (namespaceComponents.length <= 1) {
+      return exportedSymbol;
+    }
+    return String.join(".", Arrays.copyOfRange(namespaceComponents, 0, namespaceComponents.length - 1));
   }
 
   /**

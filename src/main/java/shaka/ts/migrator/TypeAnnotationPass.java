@@ -1,47 +1,21 @@
 package shaka.ts.migrator;
 
-import static com.google.javascript.rhino.TypeDeclarationsIR.anyType;
-import static com.google.javascript.rhino.TypeDeclarationsIR.arrayType;
-import static com.google.javascript.rhino.TypeDeclarationsIR.booleanType;
-import static com.google.javascript.rhino.TypeDeclarationsIR.functionType;
-import static com.google.javascript.rhino.TypeDeclarationsIR.namedType;
-import static com.google.javascript.rhino.TypeDeclarationsIR.numberType;
-import static com.google.javascript.rhino.TypeDeclarationsIR.parameterizedType;
-import static com.google.javascript.rhino.TypeDeclarationsIR.recordType;
-import static com.google.javascript.rhino.TypeDeclarationsIR.stringType;
-import static com.google.javascript.rhino.TypeDeclarationsIR.undefinedType;
-import static com.google.javascript.rhino.TypeDeclarationsIR.unionType;
-import static com.google.javascript.rhino.TypeDeclarationsIR.voidType;
-
 import com.google.common.base.Predicates;
-import com.google.common.collect.FluentIterable;
-import com.google.common.collect.HashBasedTable;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.LinkedHashMultimap;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Table;
+import com.google.common.collect.*;
 import com.google.javascript.jscomp.AbstractCompiler;
 import com.google.javascript.jscomp.CompilerPass;
 import com.google.javascript.jscomp.NodeTraversal;
 import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
 import com.google.javascript.jscomp.NodeUtil;
-import com.google.javascript.rhino.IR;
-import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.*;
 import com.google.javascript.rhino.JSDocInfo.Visibility;
-import com.google.javascript.rhino.JSTypeExpression;
-import com.google.javascript.rhino.Node;
 import com.google.javascript.rhino.Node.TypeDeclarationNode;
-import com.google.javascript.rhino.Token;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.regex.Pattern;
+
 import javax.annotation.Nullable;
+import java.util.*;
+import java.util.regex.Pattern;
+
+import static com.google.javascript.rhino.TypeDeclarationsIR.*;
 
 /**
  * Converts JavaScript code into JavaScript code annotated with TypeScript {@code
@@ -564,23 +538,23 @@ public final class TypeAnnotationPass implements CompilerPass {
 
       CollectModuleMetadata.FileModule typeModule = symbolToModule.get(typeName);
 
-      // Create a new import statement if the symbol to import isn't from the same file or the type
-      // is not part of the compilation unit.
-      if (typeModule != null && !sourceFile.equals(typeModule.file)) {
-        Node importSpec;
-        Node importFile;
-        if (module.shouldUseOldSyntax()) {
-          importSpec = Node.newString(Token.NAME, symbol);
-          importFile = Node.newString("goog:" + importedNamespace);
-        } else {
-          Node spec = new Node(Token.IMPORT_SPEC, IR.name(symbol));
-          spec.setShorthandProperty(true);
-          importSpec = new Node(Token.IMPORT_SPECS, spec);
-          importFile = Node.newString(pathUtil.getImportPath(sourceFile, module.file));
-        }
-        Node importNode = new Node(Token.IMPORT, IR.empty(), importSpec, importFile);
-        importsNeeded.put(sourceFile, importNode);
-      }
+//      // Create a new import statement if the symbol to import isn't from the same file or the type
+//      // is not part of the compilation unit.
+//      if (typeModule != null && !sourceFile.equals(typeModule.file)) {
+//        Node importSpec;
+//        Node importFile;
+//        if (module.shouldUseOldSyntax()) {
+//          importSpec = Node.newString(Token.NAME, symbol);
+//          importFile = Node.newString("goog:" + importedNamespace);
+//        } else {
+//          Node spec = new Node(Token.IMPORT_SPEC, IR.name(symbol));
+//          spec.setShorthandProperty(true);
+//          importSpec = new Node(Token.IMPORT_SPECS, spec);
+//          importFile = Node.newString(pathUtil.getImportPath(sourceFile, module.file));
+//        }
+//        Node importNode = new Node(Token.IMPORT, IR.empty(), importSpec, importFile);
+//        importsNeeded.put(sourceFile, importNode);
+//      }
       typeRewrite.put(sourceFile, importedNamespace, symbol);
       return nameUtil.replacePrefixInName(typeName, importedNamespace, symbol);
     }

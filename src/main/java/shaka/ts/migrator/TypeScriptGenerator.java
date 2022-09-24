@@ -91,6 +91,8 @@ public class TypeScriptGenerator {
 
     new StyleFixPass(compiler, comments).process(externRoot, srcRoot);
 
+    new ExternGenerationPass(compiler, modulePrePass, comments).process(externRoot, srcRoot);
+
     // We only use the source root as the extern root is ignored for codegen
     for (Node file : srcRoot.children()) {
       try {
