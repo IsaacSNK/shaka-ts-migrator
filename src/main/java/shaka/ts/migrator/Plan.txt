@@ -1,0 +1,8 @@
+1. Get all files from the shaka project
+1.1 Filter out anything not relevant
+1.2 Group by folder
+
+2. Run closure compiler for each file. Report any error and adjust
+2.1 For externs, remove @extern
+
+3. Convert to namespaces
