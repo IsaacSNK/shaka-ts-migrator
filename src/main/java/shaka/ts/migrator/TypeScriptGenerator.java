@@ -1,5 +1,7 @@
 package shaka.ts.migrator;
 
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Table;
 import com.google.javascript.jscomp.*;
 import com.google.javascript.jscomp.CodePrinter.Builder.CodeGeneratorFactory;
 import com.google.javascript.jscomp.Compiler;
@@ -44,7 +46,8 @@ public class TypeScriptGenerator {
 
   /** Returns a map from the basename to the TypeScript code generated for the file. */
   public GentsResult generateTypeScript(
-      Set<String> filesToConvert, List<SourceFile> srcFiles, List<SourceFile> externs)
+      Set<String> filesToConvert, List<SourceFile> srcFiles, List<SourceFile> externs,
+      boolean declareOnly)
       throws AssertionError {
     GentsResult result = new GentsResult();
 
@@ -65,17 +68,24 @@ public class TypeScriptGenerator {
     CommentLinkingPass commentsPass = new CommentLinkingPass(compiler);
     commentsPass.process(externRoot, srcRoot);
     final NodeComments comments = commentsPass.getComments();
+    Table<String, String, String> getTypeRewrite = HashBasedTable.create();
 
-    NamespaceConversionPass modulePass =
-        new NamespaceConversionPass(
-            compiler,
-            pathUtil,
-            nameUtil,
-            modulePrePass.getFileMap(),
-            modulePrePass.getNamespaceMap(),
-            comments,
-            opts.alreadyConvertedPrefix);
-    modulePass.process(externRoot, srcRoot);
+    if (!declareOnly) {
+      NamespaceConversionPass modulePass =
+              new NamespaceConversionPass(
+                      compiler,
+                      pathUtil,
+                      nameUtil,
+                      modulePrePass.getFileMap(),
+                      modulePrePass.getNamespaceMap(),
+                      comments,
+                      opts.alreadyConvertedPrefix);
+      modulePass.process(externRoot, srcRoot);
+      getTypeRewrite = modulePass.getTypeRewrite();
+    } else {
+      ExternConversionPass externPass = new ExternConversionPass(compiler, nameUtil);
+      externPass.process(externRoot, srcRoot);
+    }
 
     new TypeConversionPass(compiler, modulePrePass, comments).process(externRoot, srcRoot);
 
@@ -84,14 +94,12 @@ public class TypeScriptGenerator {
             pathUtil,
             nameUtil,
             modulePrePass.getSymbolMap(),
-            modulePass.getTypeRewrite(),
+            getTypeRewrite,
             comments,
             opts.externsMap)
         .process(externRoot, srcRoot);
 
     new StyleFixPass(compiler, comments).process(externRoot, srcRoot);
-
-    new ExternGenerationPass(compiler, modulePrePass, comments).process(externRoot, srcRoot);
 
     // We only use the source root as the extern root is ignored for codegen
     for (Node file : srcRoot.children()) {

@@ -19,30 +19,32 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public class Main {
     public static void main(String[] args) {
         try {
-            Options options = new Options();
             String shakaFolderPath = System.getProperty("user.home") + "/dev-workspace/shaka-player-fork";
-            String[] paths = new String[] {shakaFolderPath + "/lib", shakaFolderPath + "/ui", shakaFolderPath + "/externs"};
-            TypeScriptGenerator gents = new TypeScriptGenerator(options);
-            Set<Path> inputFiles = getAllFilesRecursively(paths);
-            Set<String> filesToConvert = new HashSet<>();
-            List<SourceFile> sourceFiles = new ArrayList<>();
-            Map<String, File> inputFileMap = new HashMap<>();
-
-            for (Path path : inputFiles) {
-                File fileFromPath = path.toFile();
-                String fileName = fileFromPath.getName();
-                if (!filesToConvert.contains(fileName)) {
-                    filesToConvert.add(fileName);
-                    sourceFiles.add(SourceFile.fromCode(fileName, getFileText(fileFromPath)));
-                    inputFileMap.put(fileName.replace(".js", ""), fileFromPath);
-                }
-            }
-            TypeScriptGenerator.GentsResult gentsResult = gents.generateTypeScript(
-                    filesToConvert, sourceFiles, Collections.emptyList());
-            writeConvertedFiles(gentsResult.sourceFileMap, inputFileMap);
+            process(false, shakaFolderPath + "/lib", shakaFolderPath + "/ui");
+            process(true,shakaFolderPath + "/externs");
         } catch (Exception ex) {
             ex.printStackTrace();
         }
+    }
+
+    private static void process(boolean declareOnly, String... paths) throws IOException {
+        var gents = new TypeScriptGenerator(new Options());
+        Set<Path> inputFiles = getAllFilesRecursively(paths);
+
+        Set<String> filesToConvert = new HashSet<>();
+        List<SourceFile> sourceFiles = new ArrayList<>();
+        Map<String, File> inputFileMap = new HashMap<>();
+        for (Path path : inputFiles) {
+            File fileFromPath = path.toFile();
+            String fileName = fileFromPath.getName();
+            if (!filesToConvert.contains(fileName)) {
+                filesToConvert.add(fileName);
+                sourceFiles.add(SourceFile.fromCode(fileName, getFileText(fileFromPath)));
+                inputFileMap.put(fileName.replace(".js", ""), fileFromPath);
+            }
+        }
+        var gentsResult = gents.generateTypeScript(filesToConvert, sourceFiles, Collections.emptyList(), declareOnly);
+        writeConvertedFiles(gentsResult.sourceFileMap, inputFileMap);
     }
 
     private static Set<Path> getAllFilesRecursively(String[] paths) throws IOException {
@@ -71,20 +73,14 @@ public class Main {
     }
 
     private static String getFileText(final File input) throws IOException {
-        return Files.asCharSource(input, Charsets.UTF_8).read();
-    }
-
-    private static List<SourceFile> getExterns(String basepath) throws IOException {
-        Set<Path> files = getAllFilesRecursively(new String[]{basepath});
-        try (Stream<Path> stream = files.stream()) {
-            return stream.map(path -> {
-                try {
-                    File file = path.toFile();
-                    return SourceFile.fromCode(file.getName(), getFileText(file));
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }).collect(Collectors.toList());
+        String fileContent = Files.asCharSource(input, Charsets.UTF_8).read();
+        if (input.getPath().contains("externs")) {
+            fileContent = fileContent.replaceAll("@externs", "");
         }
+        if (input.getName().contains("mux")) {
+            fileContent = fileContent.replaceAll("mp4: typeof muxjs\\.mp4", "")
+                    .replaceAll("@constructor", "");
+        }
+        return fileContent;
     }
 }

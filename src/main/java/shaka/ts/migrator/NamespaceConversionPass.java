@@ -91,7 +91,6 @@ public final class NamespaceConversionPass implements CompilerPass {
   private class ModuleExportConverter extends AbstractTopLevelCallback {
     @Override
     public void visit(NodeTraversal t, Node n, Node parent) {
-      System.out.println(n.toString());
       String fileName = n.getSourceFileName();
       if (isARequireLikeCall(n)) {
         n.detach();
