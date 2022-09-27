@@ -58,19 +58,17 @@ public class TypeScriptGenerator {
     Node srcRoot = compiler.getRoot().getLastChild();
 
     new RemoveGoogScopePass(compiler).process(externRoot, srcRoot);
-
     CollectModuleMetadata modulePrePass = new CollectModuleMetadata(compiler, nameUtil, filesToConvert);
     modulePrePass.process(externRoot, srcRoot);
-
-    // Strips all file nodes that we are not compiling.
     stripNonCompiledNodes(srcRoot, filesToConvert);
-
     CommentLinkingPass commentsPass = new CommentLinkingPass(compiler);
     commentsPass.process(externRoot, srcRoot);
     final NodeComments comments = commentsPass.getComments();
-    Table<String, String, String> getTypeRewrite = HashBasedTable.create();
+    Table<String, String, String> typeRewriteTable = HashBasedTable.create();
 
-    if (!declareOnly) {
+    if (declareOnly) {
+      new ExternConversionPass(compiler, nameUtil).process(externRoot, srcRoot);
+    } else {
       NamespaceConversionPass modulePass =
               new NamespaceConversionPass(
                       compiler,
@@ -81,24 +79,18 @@ public class TypeScriptGenerator {
                       comments,
                       opts.alreadyConvertedPrefix);
       modulePass.process(externRoot, srcRoot);
-      getTypeRewrite = modulePass.getTypeRewrite();
-    } else {
-      ExternConversionPass externPass = new ExternConversionPass(compiler, nameUtil);
-      externPass.process(externRoot, srcRoot);
+      typeRewriteTable = modulePass.getTypeRewrite();
     }
-
     new TypeConversionPass(compiler, modulePrePass, comments).process(externRoot, srcRoot);
-
     new TypeAnnotationPass(
             compiler,
             pathUtil,
             nameUtil,
             modulePrePass.getSymbolMap(),
-            getTypeRewrite,
+            typeRewriteTable,
             comments,
             opts.externsMap)
-        .process(externRoot, srcRoot);
-
+            .process(externRoot, srcRoot);
     new StyleFixPass(compiler, comments).process(externRoot, srcRoot);
 
     // We only use the source root as the extern root is ignored for codegen

@@ -38,6 +38,10 @@ public final class ExternConversionPass implements CompilerPass {
                     }
                     break;
                 case ASSIGN:
+                    if (!n.getGrandparent().isScript()) {
+                        break;
+                    }
+
                     // Rule: remove namespace-like. For example 'muxjs.mp4 = {};'
                     if (n.getSecondChild().isObjectLit() && n.getSecondChild().getChildCount() == 0) {
                         n.getParent().detach();
@@ -52,14 +56,14 @@ public final class ExternConversionPass implements CompilerPass {
                         }
                     }
 
-                    // Rule: wrap in a namespace any assignment expression with an object literal on the right side
-                    if (n.getSecondChild() != null && n.getFirstChild().isGetProp()) {
-                        var nameArray = getClassNameAndNamespace(n.getFirstChild());
-                        n.replaceChild(first);
-                        if (nameArray[0] != "") {
-                            wrapInNamespace(n.getParent(), nameArray[0]);
-                        }
-                    }
+//                    // Rule: wrap in a namespace any assignment expression with an object literal on the right side
+//                    if (n.getSecondChild() != null && n.getFirstChild().isGetProp()) {
+//                        var nameArray = getClassNameAndNamespace(n.getFirstChild());
+//                        n.replaceChild(n.getFirstChild(), Node.newString(Token.NAME, nameArray[1]));
+//                        if (nameArray[0] != "") {
+//                            wrapInNamespace(n.getParent(), nameArray[0]);
+//                        }
+//                    }
                     break;
                 case FUNCTION:
                     //Rule: replace empty body with ;
@@ -68,10 +72,15 @@ public final class ExternConversionPass implements CompilerPass {
                     }
                     break;
                 case EXPR_RESULT:
+                    if (n.getParent() != null && !n.getParent().isScript()) {
+                        break;
+                    }
                     //Rule: wrap structures like a.b.c; with a namespace a.b
                     if (!n.getFirstChild().isAssign()) {
-                        var qualifiedName = n.getFirstChild().getQualifiedName();
                         var nameArray = getClassNameAndNamespace(n.getFirstChild());
+                        if (nameArray[0].endsWith("prototype")) {
+                            break;
+                        }
                         if (nameArray[0] != "") {
                             wrapInNamespace(n.getFirstChild(), nameArray[0]);
                         }
@@ -95,6 +104,9 @@ public final class ExternConversionPass implements CompilerPass {
      */
     private String[] getClassNameAndNamespace(Node n) {
         var qualifiedName = n.getQualifiedName();
+        if (qualifiedName == null) {
+            return new String[] { "", "" };
+        }
         var qualifiedNameParts = Arrays.asList(qualifiedName.split("\\."));
         if (qualifiedNameParts.size() > 1) {
             var namespace = String.join(".", qualifiedNameParts.subList(0, qualifiedNameParts.size() - 1));
